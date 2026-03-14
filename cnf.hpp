@@ -174,6 +174,22 @@ public:
     }
     return found;
   }
+
+  bool conflict(Assignment &a) {
+    if (isSatisfied(a)) {
+      return false;
+    }
+    for (Literal l:lits) {
+      if (!a.IsAssigned(l.Idx())) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  std::vector<Literal> getLiterals() {
+    return lits;
+  }
 };
 
 class CNF:std::vector<Clause>{
@@ -199,5 +215,18 @@ public:
   bool isSatisfied(Assignment &a){
     for(Clause c:*this) if(!c.isSatisfied(a)) return false;
     return true;
+  }
+  
+  std::vector<Clause> getClauses() {
+    return *this;
+  }
+
+  Clause *getConflictClause(Assignment &a) {
+    for (Clause c:*this) {
+      if (c.conflict(a)) {
+        return &c;
+      }
+    }
+    return nullptr;
   }
 };
