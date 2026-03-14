@@ -10,13 +10,12 @@ class CdclSolver{
   CNF cnf;
   Assignment a;
   int decision_level = 0;
-
   void decide() {
     a.Assign(toProcess.front(), true, decision_level, -1);
     toProcess.pop();
   }
 
-  int explain(Clause *conflict) {
+  Clause explain(Clause *conflict) {
     Literal l = a.order[a.order.size()-1];
     for (std::vector<Literal>::reverse_iterator it = a.order.rbegin(); it != a.order.rend(); it++) {
       bool _;
@@ -25,8 +24,8 @@ class CdclSolver{
         break;
       }
     }
-    return a.fromClause[l.Idx()];
-    
+    Clause c = cnf.getClauses()[a.fromClause[l.Idx()]];
+    return c.Resolution(*conflict, l);
   }
 
   bool cexplains(Clause *c, Literal conflict_lit) {
