@@ -19,4 +19,10 @@ int main(){
   cnf.addClause(c6);
   CdclSolver solver(7, cnf);
   std::cout << "Satisfiable: " << solver.solve() << std::endl;
+
+  
+//   CNF c;
+//   ReadFromFile("cnfFiles/examples/CBS_k3_n100_m403_b10_0.cnf", c);
+//   printCnf(c);
 }
+

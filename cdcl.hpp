@@ -1,8 +1,9 @@
-#include<vector>
-#include<queue>
+#pragma once
+#include <vector>
 #include "./cnf.hpp"
 #include "ranges"
 #include <map>
+#include <queue>
 
 class CdclSolver{
   std::map<Clause *, std::vector<Literal>> watched;

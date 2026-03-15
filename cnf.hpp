@@ -4,6 +4,8 @@
 #include <stack>
 #include <iostream>
 #include <map>
+#include <fstream>
+#include <sstream>
 
 #pragma once
 class Literal{
@@ -35,9 +37,9 @@ public:
   bool operator ==(const Literal& o){
     return data==o.data;
   }
-  Literal operator -(){
+  Literal operator -() const {
     auto l = Literal();
-    l.data = data=data^NegatedMask;
+    l.data = data^NegatedMask;
     return l;
   }
 };
@@ -71,7 +73,7 @@ public:
   }
   void SetMaxDecisionLevel(int nlevel){
     for(int i=0; i<size; i++){
-      if(decisionLevel[i]>nlevel) RemoveAssignment(nlevel);
+      if(decisionLevel[i]>nlevel) RemoveAssignment(i);
     }
   }
 };
@@ -177,15 +179,11 @@ public:
     }
     return found;
   }
-
-  bool conflict(Assignment &a) {
-    if (isSatisfied(a)) {
-      return false;
-    }
-    for (Literal l:lits) {
-      if (!a.IsAssigned(l.Idx())) {
-        return false;
-      }
+  bool isConflict(Assignment &a){
+    if(valid) return false;
+    for(Literal l:lits){
+      if(!a.IsAssigned(l.Idx())) return false;
+      if(l.Negated()!=a.IsTrue(l.Idx())) return false;
     }
     return true;
   }
@@ -196,20 +194,16 @@ public:
   std::vector<Literal> getLiterals() {
     return lits;
   }
-   bool isConflict(Assignment &a){
-    if(valid) return false;
-    for(Literal l:lits){
-      if(!a.IsAssigned(l.Idx())) return false;
-      if(l.Negated()!=a.IsTrue(l.Idx())) return false;
-    }
-    return true;
-  }
   const std::vector<Literal>& getLiterals() const { return lits; }
   int numLiterals() const { return lits.size(); }
 };
 
 class CNF: public std::vector<Clause>{
 public:
+  using std::vector<Clause>::operator[];
+  using std::vector<Clause>::size;
+  using std::vector<Clause>::begin;
+  using std::vector<Clause>::end;
   std::stack<int> history;
   CNF(){}
 
@@ -242,10 +236,41 @@ public:
       bool needToCheck = false;
       needToCheck = needToCheck || a.IsAssigned(watched[&c][0].Idx()) || a.IsAssigned(watched[&c][1].Idx());
       needToCheck = needToCheck && (a.IsTrue(watched[&c][0].Idx()) != !watched[&c][0].Negated() || a.IsTrue(watched[&c][0].Idx()) != !watched[&c][0].Negated());
-      if (needToCheck && c.conflict(a)) {
+      if (needToCheck && c.isConflict(a)) {
         return c;
       }
     }
     return Clause();
   }
 };
+
+
+
+
+int ReadFromFile(std::string filepath, CNF& c){
+  std::ifstream file(filepath);
+  if (!file) {
+    std::cerr << "Failed to open file\n";
+    return -1;
+  }
+  std::string line;
+  int nvars;
+  while(std::getline(file, line)){
+    if(line[0]=='p'){
+      std::stringstream ss(line);
+      std::string tmp;
+      int nclause;
+      ss >> tmp >> tmp >> nvars >> nclause;
+      std::cout<<"Parsing CNF with " <<nvars<<" literals and "<<nclause<<" clauses"<<std::endl;
+      break;
+    }
+  }
+  while(std::getline(file, line)){
+    std::stringstream ss(line);
+    std::vector<Literal> lits;
+    int lit=0;
+    while (ss >> lit && lit != 0) lits.push_back(lit);
+    c.addClause(lits);
+  }
+  return nvars;
+}
