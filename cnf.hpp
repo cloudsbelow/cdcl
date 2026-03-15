@@ -1,4 +1,3 @@
-
 #include <vector>
 #include <algorithm>
 #include <string>
@@ -78,6 +77,7 @@ public:
 };
 
 class Clause{
+  public: 
   std::vector<Literal> lits;
   void Fill(std::vector<Literal> &literals){
     if(literals.empty()) return;
@@ -189,13 +189,26 @@ public:
     }
     return true;
   }
+  bool isEmpty() {
+    return lits.size() == 0;
+  }
 
   std::vector<Literal> getLiterals() {
     return lits;
   }
+   bool isConflict(Assignment &a){
+    if(valid) return false;
+    for(Literal l:lits){
+      if(!a.IsAssigned(l.Idx())) return false;
+      if(l.Negated()!=a.IsTrue(l.Idx())) return false;
+    }
+    return true;
+  }
+  const std::vector<Literal>& getLiterals() const { return lits; }
+  int numLiterals() const { return lits.size(); }
 };
 
-class CNF:std::vector<Clause>{
+class CNF: public std::vector<Clause>{
 public:
   std::stack<int> history;
   CNF(){}
@@ -219,6 +232,7 @@ public:
     for(Clause c:*this) if(!c.isSatisfied(a)) return false;
     return true;
   }
+
   
   std::vector<Clause> getClauses() {
     return *this;
