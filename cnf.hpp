@@ -47,7 +47,6 @@ public:
   std::vector<char> assignment;
   std::vector<int> decisionLevel;
   std::vector<int> fromClause;
-  std::vector<Literal> order;
   int size;
   Assignment(int maxLiteral):
     assignment(maxLiteral + 1, 0),
@@ -58,7 +57,6 @@ public:
     assignment[idx] = 2 | (val?1:0);
     decisionLevel[idx]=level;
     fromClause[idx]=from;
-    order.push_back(Literal(idx, !val));
   }
   bool IsAssigned(int idx){return (assignment[idx]&2)!=0;}
   bool IsAssigned(int idx, bool &True){
@@ -74,6 +72,16 @@ public:
       if(decisionLevel[i]>nlevel) RemoveAssignment(nlevel);
     }
   }
+  std::vector<int> GetDecisionLevel(int nlevel){
+    std::vector<int> current;
+    for(int i=0; i<size; i++){
+      if(decisionLevel[i] == nlevel) {
+        current.push_back(i);
+      }
+    }
+    return current;
+  }
+  
 };
 
 class Clause{
