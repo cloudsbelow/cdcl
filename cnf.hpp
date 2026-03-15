@@ -33,9 +33,10 @@ public:
   std::string toString(){
     return (Negated()? "~":"")+std::to_string(Idx());
   }
-  bool operator ==(const Literal& o){
+  bool operator ==(const Literal& o) const {
     return data==o.data;
   }
+  unsigned int watchIdx() const { return 2 * Idx() + (Negated() ? 1 : 0); }
   Literal operator -() const {
     auto l = Literal();
     l.data = data^NegatedMask;
@@ -220,16 +221,5 @@ public:
   
   std::vector<Clause> getClauses() {
     return *this;
-  }
-  Clause getConflictClause(Assignment &a, std::map<Clause *, std::vector<Literal>> watched) {
-    for (Clause c:*this) {
-      bool needToCheck = false;
-      needToCheck = needToCheck || a.IsAssigned(watched[&c][0].Idx()) || a.IsAssigned(watched[&c][1].Idx());
-      needToCheck = needToCheck && (a.IsTrue(watched[&c][0].Idx()) != !watched[&c][0].Negated() || a.IsTrue(watched[&c][0].Idx()) != !watched[&c][0].Negated());
-      if (needToCheck && c.conflict(a)) {
-        return c;
-      }
-    }
-    return Clause();
   }
 };
