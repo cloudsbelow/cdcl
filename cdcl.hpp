@@ -1,12 +1,15 @@
 #pragma once
 #include <vector>
 #include "./cnf.hpp"
+#include "ranges"
+#include <map>
 
 class CdclSolver {
 public:
     CNF cnf;
     Assignment a;
     int decisionLevel;
+    std::queue<int> toProcess;
     std::vector<int> trail;
 
     CdclSolver(int numVars) : a(numVars), decisionLevel(0) {}
@@ -80,4 +83,32 @@ public:
         }
         return count;
     }
+
+      void decide() {
+        a.Assign(toProcess.front(), true, decision_level, -1);
+        toProcess.pop();
+      }
+
+      int explain(Clause *conflict) {
+        Literal l = a.order[a.order.size()-1];
+        for (std::vector<Literal>::reverse_iterator it = a.order.rbegin(); it != a.order.rend(); it++) {
+          bool _;
+          if (conflict->HasLiteral(*it, _)) {
+            l = *it;
+            break;
+          }
+        }
+        return a.fromClause[l.Idx()];
+      }
+
+      bool cexplains(Clause *c, Literal conflict_lit) {
+        for (Literal l:a.assignment) {
+          bool isNeg;
+          bool hasLit  = c->HasLiteral(l, isNeg);
+          if (hasLit && !isNeg) {
+            return false;
+          }
+        }
+        return true;
+      } 
 };
