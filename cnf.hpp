@@ -35,9 +35,9 @@ public:
   bool operator ==(const Literal& o){
     return data==o.data;
   }
-  Literal operator -(){
+  Literal operator -() const {
     auto l = Literal();
-    l.data = data=data^NegatedMask;
+    l.data = data^NegatedMask;
     return l;
   }
 };
@@ -63,13 +63,13 @@ public:
     True = assignment[idx]&1;
     return (assignment[idx]&2)!=0;
   }
-  bool IsTrue(int idx){assignment[idx]&1;}
+  bool IsTrue(int idx){return assignment[idx]&1;}
   void RemoveAssignment(int idx){
     assignment[idx]=0;
   }
   void SetMaxDecisionLevel(int nlevel){
     for(int i=0; i<size; i++){
-      if(decisionLevel[i]>nlevel) RemoveAssignment(nlevel);
+      if(decisionLevel[i]>nlevel) RemoveAssignment(i);
     }
   }
 };
@@ -174,10 +174,24 @@ public:
     }
     return found;
   }
+  bool isConflict(Assignment &a){
+    if(valid) return false;
+    for(Literal l:lits){
+      if(!a.IsAssigned(l.Idx())) return false;
+      if(l.Negated()!=a.IsTrue(l.Idx())) return false;
+    }
+    return true;
+  }
+  const std::vector<Literal>& getLiterals() const { return lits; }
+  int numLiterals() const { return lits.size(); }
 };
 
 class CNF:std::vector<Clause>{
 public:
+  using std::vector<Clause>::operator[];
+  using std::vector<Clause>::size;
+  using std::vector<Clause>::begin;
+  using std::vector<Clause>::end;
   std::stack<int> history;
   CNF(){}
 
