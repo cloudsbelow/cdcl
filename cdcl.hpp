@@ -74,13 +74,10 @@ class CdclSolver{
         if ((int)lits.size() <= 1) return false;
 
         std::vector<Literal> surviving;
+        int currentCnfSize = cnf.size();
 
         for (int i = 0; i < (int)lits.size(); i++) {
-            CNF expression;
-            CdclSolver temp(a.size - 1, expression);
-            for (int j = 0; j < (int)cnf.size(); j++) {
-                if (j != clauseIdx) temp.addClause(cnf[j]);
-            }
+            CdclSolver temp(a.size - 1, cnf);
             for (int j = 0; j < i; j++) {
                 temp.addClause({-lits[j]});
             }
@@ -101,6 +98,8 @@ class CdclSolver{
                 surviving.push_back(lits[i]);
             }
         }
+        cnf.resize(currentCnfSize);
+        
         if (surviving.size() < lits.size()) {
             cnf[clauseIdx] = surviving.empty() ? Clause() : Clause(surviving);
             return true;
