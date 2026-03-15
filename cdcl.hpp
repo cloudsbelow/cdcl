@@ -111,11 +111,12 @@ class CdclSolver{
     Clause res;
     Literal l = 0;
     std::vector<int> dl = a.GetDecisionLevel(decision_level);
+    int iterations = 0;
     while (cont) {
-    l= dl[0];
-    for (int lr:dl) {
+    l= dl[iterations];
+    while (iterations < dl.size()) {
       bool _;
-      Literal lit = Literal(l);
+      Literal lit = Literal(iterations);
       if (conflict->HasLiteral(lit, _)) {
         l = lit;
         break;
@@ -124,15 +125,16 @@ class CdclSolver{
     Clause c = cnf[a.fromClause[l.Idx()]];
     res = c.Resolution(*conflict, l);
     cnf.addClause(res);
-    }
     cont = false;
     for (Literal ltl:res.getLiterals()) {
       if (a.decisionLevel[ltl.Idx()] == decision_level && ltl.Idx() != l.Idx()) {
         cont = true;
         conflict = &res;
+        iterations++;
         break;
       }
     }
+  }
     return res;
   }
 
