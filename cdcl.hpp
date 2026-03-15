@@ -6,7 +6,7 @@
 #include <queue>
 
 class CdclSolver{
-  std::map<Clause *, std::vector<Literal>> watched;
+  std::map<int, std::vector<int>> watched;
   std::queue<int> toProcess;
   CNF cnf;
   Assignment a;
@@ -14,28 +14,60 @@ class CdclSolver{
   std::map<int, bool> trail;
   int numVars;
   public:
-  CdclSolver(int numVars, CNF expression) : a(numVars), decision_level(0) {cnf = expression;}
+  CdclSolver(int numVars, CNF& expression) : a(numVars), decision_level(0) {
+    cnf = expression;
+    setup();
+  }
   void addClause(Clause c) {
       cnf.addClause(c);
   }
-  int propagate() {
-        bool progress = true;
-        while (progress) {
-            progress = false;
-            for (int i = 0; i < (int)cnf.size(); i++) {
-                if (cnf[i].isConflict(a)) {
-                    return i;
-                }
-                Literal unit(1);
-                if (cnf[i].isUnit(a, unit) && trail.find(unit.Idx()) == trail.end()) {
-                    a.Assign(unit.Idx(), !unit.Negated(), decision_level, i);
-                    trail[unit.Idx()] = true;
-                    progress = true;
-                }
-            }
-        }
-        return -1;
+  void setup(){
+    watched.clear();
+    while(!toProcess.empty())toProcess.pop();
+    bool hasConflict=false;
+    for(int i=0; i<cnf.size(); i++){
+      Clause &c = cnf[i];
+      Literal w1(0);
+      Literal w2(0);
+      int status = c.getStatus(a, w1, w2);
+      if(status==-1) continue;
+      else if(status==0) toProcess.push(i); //there will be a conflict
+      else if(status==1) toProcess.push(i);
+      else {
+        watched[w1.Idx()].push_back(i);
+        watched[w2.Idx()].push_back(i);
+      }
     }
+  }
+  void assign(Literal l, int from){
+    a.Assign(l.Idx(),!l.Negated(), decision_level, from);
+    std::cout<<"assigned "<<l.Idx()<<" to "<<!l.Negated()<<std::endl;
+    for(int i:watched[l.Idx()]){
+      toProcess.push(i);
+    }
+    watched.erase(l.Idx());
+  }
+  int propagate(){
+    while(!toProcess.empty()){
+      int top = toProcess.front();
+      toProcess.pop();
+      Clause &c = cnf[top];
+      Literal w1(0);
+      Literal w2(0);
+      int status = c.getStatus(a, w1, w2);
+      if(status == -1){
+        continue;
+      } else if(status==0){
+        return top;
+      } else if(status == 1){
+        assign(w1,top);
+      } else {
+        watched[w2.Idx()].push_back(top);
+      }
+    }
+    //std::cout<<"done propegate"<<std::endl;
+    return -1;
+  }
 
     bool vivifyClause(int clauseIdx) {
         auto lits = cnf[clauseIdx].lits;
@@ -89,7 +121,7 @@ class CdclSolver{
         for (Literal l:c.getLiterals()) {
           if (!a.IsAssigned(l.Idx())) {
               decision_level += 1;
-              a.Assign(l.Idx(), !l.Negated(), decision_level, -1);
+              assign(l,-1);
               break;
           }
         }
@@ -104,6 +136,7 @@ class CdclSolver{
       }
     }
     a.SetMaxDecisionLevel(max);
+    setup();
   }
 
   Clause explain(Clause *conflict) {

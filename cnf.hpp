@@ -179,6 +179,27 @@ public:
     }
     return found;
   }
+  /**
+   * -1: clause is already satisfied
+   * 0 : clause is conflict
+   * 1 : clause is unit
+   * 2 : clause is normal
+   */
+  int getStatus(Assignment &a, Literal &w1, Literal &w2){
+    if(valid) return -1;
+    int numfound = 0;
+    for(Literal l:lits){
+      if(a.IsAssigned(l.Idx())){
+        if(l.Negated()!=a.IsTrue(l.Idx())) return -1;
+      } else {
+        if(numfound==0) w1=l;
+        if(numfound==1) w2=l;
+        numfound++;
+        if(numfound==2) break;
+      }
+    }
+    return numfound;
+  }
   bool isConflict(Assignment &a){
     if(valid) return false;
     for(Literal l:lits){

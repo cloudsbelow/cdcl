@@ -3,7 +3,18 @@
 #include <vector>
 #include "./cdcl.hpp"
 
+
+void testWatchedLits(){
+  CNF cnf;
+  cnf.addClause({1,2,-3});
+  cnf.addClause({2,3});
+  cnf.addClause({-2});
+  CdclSolver solver(3,cnf);
+  solver.propagate();
+}
+
 int main(){
+  testWatchedLits();
   CNF cnf;
   Clause c = {1};
   Clause c2 = {-1, 2};
