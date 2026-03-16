@@ -115,12 +115,13 @@ class CdclSolver{
       return count;
   }
   void decide() {
+    decision_level += 1;
     for (Clause c:cnf) {
       if (!c.isSatisfied(a)) {
         for (Literal l:c.getLiterals()) {
           if (!a.IsAssigned(l.Idx())) {
-              decision_level += 1;
               assign(l,-1);
+              std::cout<<"Assigning "<<l.Idx()<<" to "<<!l.Negated()<<std::endl;
               return;
           }
         }
@@ -134,6 +135,8 @@ class CdclSolver{
         max = a.decisionLevel[l.Idx()];
       }
     }
+    std::cout<<"Backjumping from decision level "<<decision_level<<" to "<<max<<std::endl;
+    decision_level = max;
     a.SetMaxDecisionLevel(max);
     setup();
   }
@@ -159,12 +162,11 @@ class CdclSolver{
     return res;
   }
 
-  bool solve() {
+  bool solve(int maxIter=10000) {
     vivify();
     std::cout << "vivified" << std::endl;
-    while(true){
+    for(int i=0; i<maxIter; i++){
       int conflict = propagate();
-      std::cout << conflict << std::endl;
       if(cnf.isSatisfied(a)){
         return true;
       }
@@ -172,15 +174,19 @@ class CdclSolver{
         decide();
       } else {
         if(decision_level==1) return false;
+        std::cout<<"Conflict on clause "<<conflict<<": "<<cnf[conflict].toString()<<std::endl;
         Clause res = explain(conflict);
         if(res.isEmpty()){
           return false;
         }
         addClause(res);
         vivifyClause(cnf.size()-1);
+        std::cout<<"Add explain clause "<<res.toString()<<std::endl;
         backjump(res);
       }
     }
+    std::cout<<"Ran out of iterations"<<std::endl;
+    return false;
   }
   void printAssignment(){
     std::cout<<"Current assignment: (satisfiable "<<cnf.isSatisfied(a)<<")"<<std::endl;

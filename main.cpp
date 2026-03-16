@@ -33,9 +33,9 @@ int main(){
   // solver.printAssignment();
   
   CNF c;
-  ReadFromFile("cnfFiles/examples/CBS_k3_n100_m403_b10_0.cnf", c);
-  CdclSolver solver(110, c);
-  std::cout << "Satisfiable: " << solver.solve() << std::endl;
+  int nlits = ReadFromFile("cnfFiles/examples/CBS_k3_n100_m403_b10_0.cnf", c);
+  CdclSolver solver(nlits, c);
+  std::cout << "Satisfiable: " << solver.solve(10000) << std::endl;
   solver.printAssignment();
 }
 
