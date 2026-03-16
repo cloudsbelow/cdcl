@@ -14,7 +14,7 @@ class CdclSolver{
   std::map<int, bool> trail;
   int numVars;
   public:
-  CdclSolver(int numVars, CNF& expression) : a(numVars), decision_level(0) {
+  CdclSolver(int numVars, CNF& expression) : a(numVars), decision_level(1) {
     cnf = expression;
     setup();
   }
@@ -41,7 +41,7 @@ class CdclSolver{
   }
   void assign(Literal l, int from){
     a.Assign(l.Idx(),!l.Negated(), decision_level, from);
-    std::cout<<"assigned "<<l.Idx()<<" to "<<!l.Negated()<<std::endl;
+    //std::cout<<"assigned "<<l.Idx()<<" to "<<!l.Negated()<<std::endl;
     for(int i:watched[l.Idx()]){
       toProcess.push(i);
     }
@@ -99,7 +99,7 @@ class CdclSolver{
             }
         }
         cnf.resize(currentCnfSize);
-        
+
         if (surviving.size() < lits.size()) {
             cnf[clauseIdx] = surviving.empty() ? Clause() : Clause(surviving);
             return true;
@@ -121,13 +121,13 @@ class CdclSolver{
           if (!a.IsAssigned(l.Idx())) {
               decision_level += 1;
               assign(l,-1);
-              break;
+              return;
           }
         }
       }
     }
   }
-  void backjump(Clause res) {
+  void backjump(Clause &res) {
     int max = 0;
     for (Literal l:res.getLiterals()) {
       if (a.decisionLevel[l.Idx()] > max && a.decisionLevel[l.Idx()] < decision_level) {
@@ -138,79 +138,54 @@ class CdclSolver{
     setup();
   }
 
-  Clause explain(Clause *conflict) {
+  Clause explain(int conflictIndex) {
     bool cont = true;
-    Clause res;
-    Literal l = 0;
-    std::vector<int> dl = a.GetDecisionLevel(decision_level);
-    int iterations = 0;
-    while (cont) {
-    l= dl[iterations];
-    while (iterations < dl.size()) {
-      bool _;
-      Literal lit = Literal(iterations);
-      if (conflict->HasLiteral(lit, _)) {
-        l = lit;
+    Clause res = cnf[conflictIndex].Clone();
+    while (true) {
+      int num=0;
+      Literal pivot(0);
+      for(Literal l:res.lits) if(a.decisionLevel[l.Idx()] == decision_level){
+        num++;
+        if(a.fromClause[l.Idx()]!=-1) pivot=l;
+      }
+      if(num<=1){
+        if(num==0) std::cerr<<"Error in explain; none from current level"<<std::endl;
         break;
       }
+      if(pivot.Idx()==0) std::cerr<<"Error in explain; no pivot"<<std::endl;
+      res = res.Resolution(cnf[a.fromClause[pivot.Idx()]],pivot);
     }
-    Clause c = cnf[a.fromClause[l.Idx()]];
-    res = c.Resolution(*conflict, l);
-    cnf.addClause(res);
-    cont = false;
-    for (Literal ltl:res.getLiterals()) {
-      if (a.decisionLevel[ltl.Idx()] == decision_level && ltl.Idx() != l.Idx()) {
-        cont = true;
-        conflict = &res;
-        iterations++;
-        break;
-      }
-    }
-  }
+    if(res.valid) std::cerr<<"Error in explain; conflict clause valid"<<std::endl;
     return res;
   }
 
-  bool allDifferent() {
-    std::vector<bool> ls(numVars, false);
-    std::cout << cnf.size() << std::endl;
-    for (Clause c:cnf) {
-      std::cout << c.lits.size() << std::endl;
-      for (Literal l:c.lits) {
-        std::cout << l.Idx() << std::endl;
-        if (ls[l.Idx()]) {
-          std::cout << "not all different" << std::endl;
-          return false;
-        }
-        ls[l.Idx()] = true;
-      }
-    }
-    std::cout << "all different" << std::endl;
-    return true;
-  }
   bool solve() {
     vivify();
     std::cout << "vivified" << std::endl;
-    int conflict = propagate();
-    std::cout << conflict << std::endl;
-    while (!allDifferent()) {
-      if (conflict == -1) {
-        decide();
-        std::cout << "decided" << std::endl;
-        conflict = propagate();
-        std::cout << conflict << std::endl;
+    while(true){
+      int conflict = propagate();
+      std::cout << conflict << std::endl;
+      if(cnf.isSatisfied(a)){
+        return true;
       }
-
-      if (conflict != -1) {
-        std::cout << "explaining" << std::endl;
-        Clause res = explain(&cnf[conflict]);
-        std::cout << res.toString() << std::endl;
-        if (res.isEmpty()) {
+      if(conflict == -1){
+        decide();
+      } else {
+        if(decision_level==1) return false;
+        Clause res = explain(conflict);
+        if(res.isEmpty()){
           return false;
         }
+        addClause(res);
+        vivifyClause(cnf.size()-1);
         backjump(res);
-        std::cout << "backjumped" << std::endl;
       }
     }
-    return true;
+  }
+  void printAssignment(){
+    std::cout<<"Current assignment: (satisfiable "<<cnf.isSatisfied(a)<<")"<<std::endl;
+    for(int i=1; i<a.size; i++){
+      std::cout<<i<<" "<<a.IsTrue(i)<<std::endl;
+    }
   }
 };
