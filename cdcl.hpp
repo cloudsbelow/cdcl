@@ -177,7 +177,7 @@ class CdclSolver{
         if(decision_level==1) return false;
         if(verbose) std::cout<<"Conflict on clause "<<conflict<<": "<<cnf[conflict].toString()<<std::endl;
         Clause res = explain(conflict);
-        if(res.isEmpty()){
+        if(res.isEmpty() || decision_level == 0){
           return false;
         }
         addClause(res);
