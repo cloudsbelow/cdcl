@@ -142,6 +142,19 @@ class CdclSolver{
     setup();
   }
 
+  
+  int LBD(Clause c) {
+    int lbd = 0;
+    std::vector<int> decision_levels(decision_level + 1, false);
+    for (Literal l:c.lits) {
+      if (!decision_levels[a.decisionLevel[l.Idx()]]) {
+        lbd += 1;
+        decision_levels[a.decisionLevel[l.Idx()]] = true;
+      }
+    }
+    return lbd;
+  }
+
   Clause explain(int conflictIndex) {
     bool cont = true;
     Clause res = cnf[conflictIndex].Clone();
@@ -163,7 +176,7 @@ class CdclSolver{
     return res;
   }
 
-  bool solve(int maxIter=100000) {
+  bool solve(int maxIter=100000, int max_LBD=3) {
     vivify();
     if(verbose) std::cout << "vivified" << std::endl;
     for(int i=0; i<maxIter; i++){
@@ -181,7 +194,10 @@ class CdclSolver{
           return false;
         }
         addClause(res);
-        vivifyClause(cnf.size()-1);
+        if (LBD(res) < max_LBD) {
+          vivifyClause(cnf.size()-1);
+          if(verbose) std::cout << "vivified" << std::endl;
+        }
         if(verbose) std::cout<<"Add explain clause "<<res.toString()<<std::endl;
         backjump(res);
       }
