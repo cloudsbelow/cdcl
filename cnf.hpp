@@ -49,7 +49,6 @@ public:
   std::vector<char> assignment;
   std::vector<int> decisionLevel;
   std::vector<int> fromClause;
-  std::vector<Literal> order;
   int size;
   Assignment(int maxLiteral):
     assignment(maxLiteral + 1, 0),
@@ -60,7 +59,6 @@ public:
     assignment[idx] = 2 | (val?1:0);
     decisionLevel[idx]=level;
     fromClause[idx]=from;
-    order.push_back(Literal(idx, !val));
   }
   bool IsAssigned(int idx){return (assignment[idx]&2)!=0;}
   bool IsAssigned(int idx, bool &True){
@@ -76,6 +74,16 @@ public:
       if(decisionLevel[i]>nlevel) RemoveAssignment(i);
     }
   }
+  std::vector<int> GetDecisionLevel(int nlevel){
+    std::vector<int> current;
+    for(int i=0; i<size; i++){
+      if(decisionLevel[i] == nlevel) {
+        current.push_back(i);
+      }
+    }
+    return current;
+  }
+  
 };
 
 class Clause{
@@ -178,6 +186,27 @@ public:
       }
     }
     return found;
+  }
+  /**
+   * -1: clause is already satisfied
+   * 0 : clause is conflict
+   * 1 : clause is unit
+   * 2 : clause is normal
+   */
+  int getStatus(Assignment &a, Literal &w1, Literal &w2){
+    if(valid) return -1;
+    int numfound = 0;
+    for(Literal l:lits){
+      if(a.IsAssigned(l.Idx())){
+        if(l.Negated()!=a.IsTrue(l.Idx())) return -1;
+      } else {
+        if(numfound==0) w1=l;
+        if(numfound==1) w2=l;
+        numfound++;
+        if(numfound==2) break;
+      }
+    }
+    return numfound;
   }
   bool isConflict(Assignment &a){
     if(valid) return false;

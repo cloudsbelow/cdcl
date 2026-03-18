@@ -1,9 +1,8 @@
 #include <iostream>
 #include <filesystem>
 #include <chrono>
-#include <minisat/core/Solver.h>
-#include <minisat/core/Dimacs.h>
-#include <zlib.h>
+#include "./cnf.hpp"
+#include "./cdcl.hpp"
 
 namespace fs = std::filesystem;
 
@@ -22,23 +21,23 @@ int main() {
   for (const auto& filepath : files) {
     std::cout << "=== " << filepath << " ===" << std::endl;
 
-    Minisat::Solver solver;
-    gzFile in = gzopen(filepath.c_str(), "rb");
-    if (in == NULL) {
+    CNF cnf;
+    int nvars = ReadFromFile(filepath, cnf);
+    if (nvars < 0) {
       std::cerr << "Skipping " << filepath << std::endl;
       continue;
     }
-    Minisat::parse_DIMACS(in, solver);
-    gzclose(in);
+
+    CdclSolver solver(nvars, cnf, false);
 
     auto start = std::chrono::high_resolution_clock::now();
-    bool sat = solver.solve();
+    bool sat = solver.solve(100000, 3, false);
     auto end = std::chrono::high_resolution_clock::now();
 
     double elapsed = std::chrono::duration<double>(end - start).count();
     totalSolveTime += elapsed;
     std::cout << "Result: " << (sat ? "SAT" : "UNSAT") << std::endl;
-    std::cout << "Iterations: " << solver.decisions << std::endl;
+    std::cout << "Iterations: " << solver.iterationCount << std::endl;
     std::cout << "Time: " << elapsed << "s" << std::endl;
     std::cout << std::endl;
   }

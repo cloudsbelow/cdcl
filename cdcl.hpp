@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 #include <vector>
 #include "./cnf.hpp"
 #include "ranges"
@@ -6,36 +7,73 @@
 #include <queue>
 
 class CdclSolver{
-  std::map<Clause *, std::vector<Literal>> watched;
+  std::map<int, std::vector<int>> watched;
   std::queue<int> toProcess;
   CNF cnf;
   Assignment a;
   int decision_level;
   std::map<int, bool> trail;
   int numVars;
+  bool verbose;
   public:
-  CdclSolver(int numVars, CNF expression) : a(numVars), decision_level(0) {cnf = expression;}
+  int iterationCount;
+  int vivifiedCount;
+  int learnedVivifiedCount;
+  double preprocessTime;
+  CdclSolver(int numVars, CNF& expression, bool verbose=false) : a(numVars), decision_level(1), verbose(verbose), iterationCount(0), vivifiedCount(0), learnedVivifiedCount(0), preprocessTime(0.0) {
+    cnf = expression;
+    setup();
+  }
   void addClause(Clause c) {
       cnf.addClause(c);
   }
-  int propagate() {
-        bool progress = true;
-        while (progress) {
-            progress = false;
-            for (int i = 0; i < (int)cnf.size(); i++) {
-                if (cnf[i].isConflict(a)) {
-                    return i;
-                }
-                Literal unit(1);
-                if (cnf[i].isUnit(a, unit) && trail.find(unit.Idx()) == trail.end()) {
-                    a.Assign(unit.Idx(), !unit.Negated(), decision_level, i);
-                    trail[unit.Idx()] = true;
-                    progress = true;
-                }
-            }
-        }
-        return -1;
+  void setup(){
+    watched.clear();
+    while(!toProcess.empty())toProcess.pop();
+    bool hasConflict=false;
+    for(int i=0; i<cnf.size(); i++){
+      Clause &c = cnf[i];
+      Literal w1(0);
+      Literal w2(0);
+      int status = c.getStatus(a, w1, w2);
+      if(status==-1) continue;
+      else if(status==0) toProcess.push(i); //there will be a conflict
+      else if(status==1) toProcess.push(i);
+      else {
+        watched[w1.Idx()].push_back(i);
+        watched[w2.Idx()].push_back(i);
+      }
     }
+  }
+  void assign(Literal l, int from){
+    a.Assign(l.Idx(),!l.Negated(), decision_level, from);
+    //std::cout<<"assigned "<<l.Idx()<<" to "<<!l.Negated()<<std::endl;
+    for(int i:watched[l.Idx()]){
+      toProcess.push(i);
+    }
+    watched.erase(l.Idx());
+  }
+  int propagate(){
+    while(!toProcess.empty()){
+      int top = toProcess.front();
+      toProcess.pop();
+      Clause &c = cnf[top];
+      Literal w1(0);
+      Literal w2(0);
+      int status = c.getStatus(a, w1, w2);
+      if(status == -1){
+        continue;
+      } else if(status==0){
+        return top;
+      } else if(status == 1){
+        assign(w1,top);
+      } else {
+        watched[w2.Idx()].push_back(top);
+      }
+    }
+    //std::cout<<"done propegate"<<std::endl;
+    return -1;
+  }
 
     bool vivifyClause(int clauseIdx) {
         auto lits = cnf[clauseIdx].lits;
@@ -44,23 +82,37 @@ class CdclSolver{
         std::vector<Literal> surviving;
 
         for (int i = 0; i < (int)lits.size(); i++) {
-            CNF expression;
-            CdclSolver temp(a.size - 1, expression);
-            for (int j = 0; j < (int)cnf.size(); j++) {
-                if (j != clauseIdx) temp.addClause(cnf[j]);
-            }
+            // save current state
+            cnf.pushClauses();
             for (int j = 0; j < i; j++) {
-                temp.addClause({-lits[j]});
+                cnf.addClause({-lits[j]});
             }
 
-            int conflict = temp.propagate();
-
-            if (conflict >= 0) {
-                break;
+            // temp fresh assignment
+            Assignment tempA(a.size - 1);
+            bool conflict = false;
+            bool progress = true;
+            while (progress) {
+                progress = false;
+                // naivie prop b/c watched literals not valid
+                for (int ci = 0; ci < (int)cnf.size(); ci++) {
+                    if (cnf[ci].isConflict(tempA)) { conflict = true; break; }
+                    Literal unit(1);
+                    if (cnf[ci].isUnit(tempA, unit) && !tempA.IsAssigned(unit.Idx())) {
+                        tempA.Assign(unit.Idx(), !unit.Negated(), 0, ci);
+                        progress = true;
+                    }
+                }
+                if (conflict) break;
             }
 
-            if (temp.a.IsAssigned(lits[i].Idx())) {
-                bool litIsTrue = lits[i].Negated() != temp.a.IsTrue(lits[i].Idx());
+            // restore
+            cnf.popClauses();
+
+            if (conflict) break;
+
+            if (tempA.IsAssigned(lits[i].Idx())) {
+                bool litIsTrue = lits[i].Negated() != tempA.IsTrue(lits[i].Idx());
                 if (litIsTrue) {
                     surviving.push_back(lits[i]);
                     break;
@@ -69,6 +121,7 @@ class CdclSolver{
                 surviving.push_back(lits[i]);
             }
         }
+
         if (surviving.size() < lits.size()) {
             cnf[clauseIdx] = surviving.empty() ? Clause() : Clause(surviving);
             return true;
@@ -84,95 +137,106 @@ class CdclSolver{
       return count;
   }
   void decide() {
+    decision_level += 1;
     for (Clause c:cnf) {
       if (!c.isSatisfied(a)) {
         for (Literal l:c.getLiterals()) {
           if (!a.IsAssigned(l.Idx())) {
-              decision_level += 1;
-              a.Assign(l.Idx(), !l.Negated(), decision_level, -1);
-              break;
+              assign(l,-1);
+              if(verbose) std::cout<<"Assigning "<<l.Idx()<<" to "<<!l.Negated()<<std::endl;
+              return;
           }
         }
       }
     }
   }
-  void backjump(Clause res) {
+  void backjump(Clause &res) {
     int max = 0;
     for (Literal l:res.getLiterals()) {
       if (a.decisionLevel[l.Idx()] > max && a.decisionLevel[l.Idx()] < decision_level) {
         max = a.decisionLevel[l.Idx()];
       }
     }
+    if(verbose) std::cout<<"Backjumping from decision level "<<decision_level<<" to "<<max<<std::endl;
+    decision_level = max;
     a.SetMaxDecisionLevel(max);
+    setup();
   }
 
-  Clause explain(Clause *conflict) {
+  
+  int LBD(Clause c) {
+    int lbd = 0;
+    std::vector<int> decision_levels(decision_level + 1, false);
+    for (Literal l:c.lits) {
+      if (!decision_levels[a.decisionLevel[l.Idx()]]) {
+        lbd += 1;
+        decision_levels[a.decisionLevel[l.Idx()]] = true;
+      }
+    }
+    return lbd;
+  }
+
+  Clause explain(int conflictIndex) {
     bool cont = true;
-    Clause res;
-    Literal l = a.order[a.order.size()-1];
-    while (cont) {
-    l = a.order[a.order.size()-1];
-    for (std::vector<Literal>::reverse_iterator it = a.order.rbegin(); it != a.order.rend(); it++) {
-      bool _;
-      if (conflict->HasLiteral(*it, _)) {
-        l = *it;
+    Clause res = cnf[conflictIndex].Clone();
+    while (true) {
+      int num=0;
+      Literal pivot(0);
+      for(Literal l:res.lits) if(a.decisionLevel[l.Idx()] == decision_level){
+        num++;
+        if(a.fromClause[l.Idx()]!=-1) pivot=l;
+      }
+      if(num<=1){
+        if(num==0) std::cerr<<"Error in explain; none from current level"<<std::endl;
         break;
       }
+      if(pivot.Idx()==0) std::cerr<<"Error in explain; no pivot"<<std::endl;
+      res = res.Resolution(cnf[a.fromClause[pivot.Idx()]],pivot);
     }
-    Clause c = cnf[a.fromClause[l.Idx()]];
-    res = c.Resolution(*conflict, l);
-    cnf.addClause(res);
-    }
-    cont = false;
-    for (Literal ltl:res.getLiterals()) {
-      if (a.decisionLevel[ltl.Idx()] == decision_level && ltl.Idx() != l.Idx()) {
-        cont = true;
-        break;
-      }
-    }
+    if(res.valid) std::cerr<<"Error in explain; conflict clause valid"<<std::endl;
     return res;
   }
-  bool allDifferent() {
-    std::vector<bool> ls(numVars, false);
-    std::cout << cnf.size() << std::endl;
-    for (Clause c:cnf) {
-      std::cout << c.lits.size() << std::endl;
-      for (Literal l:c.lits) {
-        std::cout << l.Idx() << std::endl;
-        if (ls[l.Idx()]) {
-          std::cout << "not all different" << std::endl;
-          return false;
-        }
-        ls[l.Idx()] = true;
-      }
-    }
-    std::cout << "all different" << std::endl;
-    return true;
-  }
-  bool solve() {
-    vivify();
-    std::cout << "vivified" << std::endl;
-    int conflict = propagate();
-    std::cout << conflict << std::endl;
-    while (!allDifferent()) {
-      if (conflict == -1) {
-        decide();
-        std::cout << "decided" << std::endl;
-        conflict = propagate();
-        std::cout << conflict << std::endl;
-      }
 
-      if (conflict != -1) {
-        std::cout << "explaining" << std::endl;
-        Clause res = explain(&cnf[conflict]);
-        std::cout << res.toString() << std::endl;
-        if (res.isEmpty()) {
+  bool solve(int maxIter=100000, int max_LBD=3, bool enableVivify=true, bool enablePreprocess=true) {
+    if (enableVivify && enablePreprocess) {
+      auto vstart = std::chrono::high_resolution_clock::now();
+      vivifiedCount = vivify();
+      if (vivifiedCount > 0) setup();
+      auto vend = std::chrono::high_resolution_clock::now();
+      preprocessTime = std::chrono::duration<double>(vend - vstart).count();
+      if(verbose) std::cout << "vivified" << std::endl;
+    }
+    for(int i=0; i<maxIter; i++){
+      iterationCount = i;
+      int conflict = propagate();
+      if(cnf.isSatisfied(a)){
+        return true;
+      }
+      if(conflict == -1){
+        decide();
+      } else {
+        if(decision_level==1) return false;
+        if(verbose) std::cout<<"Conflict on clause "<<conflict<<": "<<cnf[conflict].toString()<<std::endl;
+        Clause res = explain(conflict);
+        if(res.isEmpty() || decision_level == 0){
           return false;
         }
+        addClause(res);
+        if (enableVivify && LBD(res) < max_LBD) {
+          if(vivifyClause(cnf.size()-1)) learnedVivifiedCount++;
+          if(verbose) std::cout << "vivified" << std::endl;
+        }
+        if(verbose) std::cout<<"Add explain clause "<<res.toString()<<std::endl;
         backjump(res);
-        std::cout << "backjumped" << std::endl;
       }
     }
-    return true;
+    std::cout<<"Ran out of iterations"<<std::endl;
+    return false;
+  }
+  void printAssignment(){
+    std::cout<<"Current assignment: (satisfiable "<<cnf.isSatisfied(a)<<")"<<std::endl;
+    for(int i=1; i<a.size; i++){
+      std::cout<<i<<" "<<a.IsTrue(i)<<std::endl;
+    }
   }
 };
