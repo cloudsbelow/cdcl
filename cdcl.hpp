@@ -80,6 +80,7 @@ class CdclSolver{
         if ((int)lits.size() <= 1) return false;
 
         std::vector<Literal> surviving;
+        int currentCnfSize = cnf.size();
 
         for (int i = 0; i < (int)lits.size(); i++) {
             // save current state
