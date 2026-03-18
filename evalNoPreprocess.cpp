@@ -1,13 +1,15 @@
 #include <iostream>
 #include <filesystem>
 #include <chrono>
-#include <minisat/core/Solver.h>
-#include <minisat/core/Dimacs.h>
-#include <zlib.h>
+#include <cstdlib>
+#include "./cnf.hpp"
+#include "./cdcl.hpp"
 
 namespace fs = std::filesystem;
 
-int main() {
+int main(int argc, char* argv[]) {
+  int MAX_LBD = argc > 1 ? std::atoi(argv[1]) : 5;
+  std::cout << "Using max_LBD = " << MAX_LBD << " (no preprocessing)" << std::endl;
   std::string dir = "cnfFiles/examples";
   std::vector<std::string> files;
   for (auto& entry : fs::directory_iterator(dir)) {
@@ -22,23 +24,24 @@ int main() {
   for (const auto& filepath : files) {
     std::cout << "=== " << filepath << " ===" << std::endl;
 
-    Minisat::Solver solver;
-    gzFile in = gzopen(filepath.c_str(), "rb");
-    if (in == NULL) {
+    CNF cnf;
+    int nvars = ReadFromFile(filepath, cnf);
+    if (nvars < 0) {
       std::cerr << "Skipping " << filepath << std::endl;
       continue;
     }
-    Minisat::parse_DIMACS(in, solver);
-    gzclose(in);
+
+    CdclSolver solver(nvars, cnf, false);
 
     auto start = std::chrono::high_resolution_clock::now();
-    bool sat = solver.solve();
+    bool sat = solver.solve(100000, MAX_LBD, true, false);
     auto end = std::chrono::high_resolution_clock::now();
 
     double elapsed = std::chrono::duration<double>(end - start).count();
     totalSolveTime += elapsed;
     std::cout << "Result: " << (sat ? "SAT" : "UNSAT") << std::endl;
-    std::cout << "Iterations: " << solver.decisions << std::endl;
+    std::cout << "Iterations: " << solver.iterationCount << std::endl;
+    std::cout << "Learned clauses vivified: " << solver.learnedVivifiedCount << std::endl;
     std::cout << "Time: " << elapsed << "s" << std::endl;
     std::cout << std::endl;
   }

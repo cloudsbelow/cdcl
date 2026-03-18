@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 #include <vector>
 #include "./cnf.hpp"
 #include "ranges"
@@ -15,7 +16,11 @@ class CdclSolver{
   int numVars;
   bool verbose;
   public:
-  CdclSolver(int numVars, CNF& expression, bool verbose=false) : a(numVars), decision_level(1), verbose(verbose) {
+  int iterationCount;
+  int vivifiedCount;
+  int learnedVivifiedCount;
+  double preprocessTime;
+  CdclSolver(int numVars, CNF& expression, bool verbose=false) : a(numVars), decision_level(1), verbose(verbose), iterationCount(0), vivifiedCount(0), learnedVivifiedCount(0), preprocessTime(0.0) {
     cnf = expression;
     setup();
   }
@@ -78,19 +83,37 @@ class CdclSolver{
         int currentCnfSize = cnf.size();
 
         for (int i = 0; i < (int)lits.size(); i++) {
-            CdclSolver temp(a.size - 1, cnf);
+            // save current state
+            cnf.pushClauses();
             for (int j = 0; j < i; j++) {
-                temp.addClause({-lits[j]});
+                cnf.addClause({-lits[j]});
             }
 
-            int conflict = temp.propagate();
-
-            if (conflict >= 0) {
-                break;
+            // temp fresh assignment
+            Assignment tempA(a.size - 1);
+            bool conflict = false;
+            bool progress = true;
+            while (progress) {
+                progress = false;
+                // naivie prop b/c watched literals not valid
+                for (int ci = 0; ci < (int)cnf.size(); ci++) {
+                    if (cnf[ci].isConflict(tempA)) { conflict = true; break; }
+                    Literal unit(1);
+                    if (cnf[ci].isUnit(tempA, unit) && !tempA.IsAssigned(unit.Idx())) {
+                        tempA.Assign(unit.Idx(), !unit.Negated(), 0, ci);
+                        progress = true;
+                    }
+                }
+                if (conflict) break;
             }
 
-            if (temp.a.IsAssigned(lits[i].Idx())) {
-                bool litIsTrue = lits[i].Negated() != temp.a.IsTrue(lits[i].Idx());
+            // restore
+            cnf.popClauses();
+
+            if (conflict) break;
+
+            if (tempA.IsAssigned(lits[i].Idx())) {
+                bool litIsTrue = lits[i].Negated() != tempA.IsTrue(lits[i].Idx());
                 if (litIsTrue) {
                     surviving.push_back(lits[i]);
                     break;
@@ -99,7 +122,6 @@ class CdclSolver{
                 surviving.push_back(lits[i]);
             }
         }
-        cnf.resize(currentCnfSize);
 
         if (surviving.size() < lits.size()) {
             cnf[clauseIdx] = surviving.empty() ? Clause() : Clause(surviving);
@@ -176,10 +198,17 @@ class CdclSolver{
     return res;
   }
 
-  bool solve(int maxIter=100000, int max_LBD=3) {
-    vivify();
-    if(verbose) std::cout << "vivified" << std::endl;
+  bool solve(int maxIter=100000, int max_LBD=3, bool enableVivify=true, bool enablePreprocess=true) {
+    if (enableVivify && enablePreprocess) {
+      auto vstart = std::chrono::high_resolution_clock::now();
+      vivifiedCount = vivify();
+      if (vivifiedCount > 0) setup();
+      auto vend = std::chrono::high_resolution_clock::now();
+      preprocessTime = std::chrono::duration<double>(vend - vstart).count();
+      if(verbose) std::cout << "vivified" << std::endl;
+    }
     for(int i=0; i<maxIter; i++){
+      iterationCount = i;
       int conflict = propagate();
       if(cnf.isSatisfied(a)){
         return true;
@@ -194,8 +223,8 @@ class CdclSolver{
           return false;
         }
         addClause(res);
-        if (LBD(res) < max_LBD) {
-          vivifyClause(cnf.size()-1);
+        if (enableVivify && LBD(res) < max_LBD) {
+          if(vivifyClause(cnf.size()-1)) learnedVivifiedCount++;
           if(verbose) std::cout << "vivified" << std::endl;
         }
         if(verbose) std::cout<<"Add explain clause "<<res.toString()<<std::endl;
